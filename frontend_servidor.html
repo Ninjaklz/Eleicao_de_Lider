@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Eleição de Líder — Algoritmo Bully</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #21262d;
+    --text:     #e6edf3;
+    --muted:    #7d8590;
+    --accent:   #f7c948;    /* amarelo-ouro: liderança */
+    --green:    #3fb950;
+    --red:      #f85149;
+    --blue:     #58a6ff;
+    --purple:   #bc8cff;
+    --orange:   #ffa657;
+    --radius:   10px;
+    --mono:     'JetBrains Mono', 'Fira Code', monospace;
+    --sans:     'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header .crown { font-size: 26px; }
+  header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+  header p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    margin-left: auto;
+    background: #21262d;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ── Layout ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* ── Left panel ── */
+  .left {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  button {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary   { background: var(--accent);  color: #000; border-color: var(--accent); }
+  .btn-danger    { background: var(--red);      color: #fff; border-color: var(--red); }
+  .btn-green     { background: var(--green);    color: #000; border-color: var(--green); }
+  .btn-blue      { background: var(--blue);     color: #000; border-color: var(--blue); }
+  .btn-ghost     { background: transparent;     color: var(--text); }
+  .btn-orange    { background: var(--orange);   color: #000; border-color: var(--orange); }
+  button:hover   { opacity: .85; transform: translateY(-1px); }
+  button:active  { transform: translateY(0); opacity: 1; }
+  button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+  /* ── Network canvas ── */
+  .network-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .network-wrap h2 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  #networkCanvas {
+    width: 100%;
+    display: block;
+    border-radius: 8px;
+  }
+
+  /* ── Process cards ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+  }
+  .process-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 12px;
+    text-align: center;
+    transition: border-color .2s, box-shadow .2s;
+    cursor: pointer;
+    position: relative;
+  }
+  .process-card:hover { border-color: var(--blue); }
+  .process-card.leader {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(247,201,72,.25);
+  }
+  .process-card.dead {
+    border-color: #30363d;
+    opacity: .5;
+    filter: grayscale(1);
+  }
+  .process-card.electing { border-color: var(--purple); animation: pulse 1s infinite; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(188,140,255,.4); }
+    50%      { box-shadow: 0 0 0 8px rgba(188,140,255,0); }
+  }
+
+  .card-icon { font-size: 28px; line-height: 1; margin-bottom: 6px; }
+  .card-pid  { font-size: 22px; font-weight: 800; font-family: var(--mono); }
+  .card-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .card-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-top: 8px;
+    display: inline-block;
+  }
+  .badge-leader   { background: rgba(247,201,72,.2);  color: var(--accent);  border: 1px solid var(--accent); }
+  .badge-alive    { background: rgba(63,185,80,.15);  color: var(--green);   border: 1px solid var(--green); }
+  .badge-dead     { background: rgba(248,81,73,.15);  color: var(--red);     border: 1px solid var(--red); }
+  .badge-electing { background: rgba(188,140,255,.2); color: var(--purple);  border: 1px solid var(--purple); }
+
+  /* ── Right panel: log ── */
+  .right {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .log-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-header h2 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+  .log-count {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+  #logContainer {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    scroll-behavior: smooth;
+  }
+  .log-entry {
+    display: grid;
+    grid-template-columns: 52px 40px 1fr;
+    gap: 6px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    margin-bottom: 3px;
+    font-size: 11.5px;
+    font-family: var(--mono);
+    transition: background .1s;
+  }
+  .log-entry:hover { background: rgba(255,255,255,.04); }
+  .log-entry.highlight { background: rgba(247,201,72,.06); border-left: 3px solid var(--accent); }
+  .log-time   { color: var(--muted); font-size: 10px; align-self: start; padding-top: 1px; }
+  .log-type   { font-size: 10px; font-weight: 700; align-self: start; padding-top: 1px; }
+  .log-detail { color: var(--text); line-height: 1.5; }
+  .log-sender { color: var(--muted); font-size: 10px; }
+
+  /* type colors */
+  .type-INIT        { color: var(--green); }
+  .type-FALHA       { color: var(--red); }
+  .type-ELEIÇÃO     { color: var(--purple); }
+  .type-ELECTION    { color: var(--blue); }
+  .type-OK          { color: var(--green); }
+  .type-COORDINATOR { color: var(--accent); }
+  .type-FIM         { color: var(--green); }
+  .type-ERRO        { color: var(--red); }
+  .type-RECUPERAÇÃO { color: var(--orange); }
+  .type-NOVO        { color: var(--blue); }
+
+  /* ── Status bar ── */
+  .status-bar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .status-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-green  { background: var(--green); }
+  .dot-red    { background: var(--red); }
+  .dot-yellow { background: var(--accent); }
+  #leaderDisplay {
+    margin-left: auto;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: var(--accent);
+  }
+
+  /* ── Tooltip ── */
+  .tooltip {
+    position: fixed;
+    background: #1f2937;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+    z-index: 100;
+    min-width: 160px;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip h4 { font-weight: 700; margin-bottom: 6px; }
+  .tooltip .t-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }
+
+  /* ── Modal ── */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .overlay.show { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    width: 340px;
+    transform: scale(.95); transition: transform .2s;
+  }
+  .overlay.show .modal { transform: scale(1); }
+  .modal h3 { font-size: 16px; margin-bottom: 16px; }
+  .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .modal-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crown">👑</div>
+  <div>
+    <h1>Algoritmo Bully — Eleição de Líder</h1>
+    <p>Simulação de Sistemas Distribuídos &nbsp;·&nbsp; Protótipo Interativo</p>
+  </div>
+  <div class="badge">SD · 2026-1</div>
+</header>
+
+<main>
+  <!-- ── LEFT PANEL ── -->
+  <div class="left">
+    <div class="controls">
+      <button class="btn-danger"   onclick="killLeader()">💀 Matar Líder</button>
+      <button class="btn-primary"  onclick="startElection()">⚡ Iniciar Eleição</button>
+      <button class="btn-green"    onclick="addProcess()">➕ Novo Processo</button>
+      <button class="btn-ghost"    onclick="openReset()">🔄 Reiniciar</button>
+    </div>
+
+    <!-- Network diagram -->
+    <div class="network-wrap">
+      <h2>🌐 Topologia da Rede</h2>
+      <canvas id="networkCanvas" height="260"></canvas>
+    </div>
+
+    <!-- Process cards -->
+    <div id="cardsGrid" class="cards-grid"></div>
+  </div>
+
+  <!-- ── RIGHT PANEL: log ── -->
+  <div class="right">
+    <div class="log-header">
+      <h2>📋 Log de Mensagens</h2>
+      <span class="log-count" id="logCount">0 eventos</span>
+    </div>
+    <div id="logContainer"></div>
+  </div>
+</main>
+
+<div class="status-bar">
+  <div class="status-item"><div class="dot dot-green"></div><span id="aliveCount">— vivos</span></div>
+  <div class="status-item"><div class="dot dot-red"></div><span id="deadCount">— mortos</span></div>
+  <div id="leaderDisplay">Líder: —</div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- Reset Modal -->
+<div class="overlay" id="resetOverlay" onclick="closeReset(event)">
+  <div class="modal">
+    <h3>🔄 Reiniciar Simulação</h3>
+    <p style="color:var(--muted);font-size:13px">Escolha o número de processos:</p>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn-ghost" onclick="doReset(3)">3</button>
+      <button class="btn-ghost" onclick="doReset(4)">4</button>
+      <button class="btn-ghost" onclick="doReset(5)">5</button>
+      <button class="btn-ghost" onclick="doReset(6)">6</button>
+      <button class="btn-ghost" onclick="doReset(7)">7</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeReset()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Process action Modal -->
+<div class="overlay" id="procOverlay" onclick="closeProcModal(event)">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeProcModal()">✕</button>
+    <h3 id="procModalTitle">Processo</h3>
+    <div id="procModalBody"></div>
+  </div>
+</div>
+
+<script>
+const SERVER = "http://localhost:8765";
+let state = { processes: [], leader_pid: null, messages: [] };
+let lastMsgCount = 0;
+let selectedPid = null;
+
+// ── Fetch helpers ─────────────────────────────────────────────
+async function api(path) {
+  try {
+    const r = await fetch(SERVER + path);
+    return await r.json();
+  } catch(e) {
+    console.warn("API error", e);
+    return null;
+  }
+}
+
+async function fetchState() {
+  const s = await api("/state");
+  if (!s) return;
+  state = s;
+  render();
+}
+
+// ── Actions ───────────────────────────────────────────────────
+async function killLeader()    { await api("/kill_leader");    await fetchState(); }
+async function startElection() { await api("/start_election"); pollUntilDone(); }
+async function addProcess()    { await api("/add");            await fetchState(); }
+
+function openReset()   { document.getElementById("resetOverlay").classList.add("show"); }
+function closeReset(e) { if (!e || e.target.id==="resetOverlay") document.getElementById("resetOverlay").classList.remove("show"); }
+async function doReset(n) {
+  await api(`/reset?n=${n}`);
+  lastMsgCount = 0;
+  closeReset();
+  await fetchState();
+}
+
+function openProcModal(pid) {
+  const p = state.processes.find(x => x.pid === pid);
+  if (!p) return;
+  selectedPid = pid;
+  document.getElementById("procModalTitle").textContent = `Processo ${pid}`;
+  const isLeader = p.pid === state.leader_pid;
+  document.getElementById("procModalBody").innerHTML = `
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+      Status: <strong style="color:${p.alive ? 'var(--green)':'var(--red)'}">${p.alive ? "Vivo":"Morto"}</strong>
+      ${isLeader ? ' &nbsp;·&nbsp; <strong style="color:var(--accent)">👑 Líder</strong>' : ''}
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${p.alive
+        ? `<button class="btn-danger"  onclick="procKill(${pid})">💀 Matar</button>
+           <button class="btn-primary" onclick="procElect(${pid})">⚡ Iniciar Eleição daqui</button>`
+        : `<button class="btn-green"   onclick="procRevive(${pid})">💚 Reviver</button>`}
+    </div>`;
+  document.getElementById("procOverlay").classList.add("show");
+}
+function closeProcModal(e) {
+  if (!e || e.target.id==="procOverlay") document.getElementById("procOverlay").classList.remove("show");
+}
+async function procKill(pid)   { await api(`/kill?pid=${pid}`);   closeProcModal(); pollUntilDone(); }
+async function procRevive(pid) { await api(`/revive?pid=${pid}`); closeProcModal(); pollUntilDone(); }
+async function procElect(pid)  { await api(`/start_election?pid=${pid}`); closeProcModal(); pollUntilDone(); }
+
+// poll enquanto eleição ocorre
+function pollUntilDone() {
+  let ticks = 0;
+  const t = setInterval(async () => {
+    await fetchState();
+    ticks++;
+    if (ticks > 20) clearInterval(t);
+    // para quando não há eleição em andamento
+    const electing = state.processes.some(p => p.in_election);
+    if (!electing && ticks > 3) clearInterval(t);
+  }, 400);
+}
+
+// ── Render ────────────────────────────────────────────────────
+function render() {
+  renderCards();
+  renderLog();
+  renderStatus();
+  renderCanvas();
+}
+
+const ICONS = { alive: "🖥️", dead: "💀", leader: "👑" };
+
+function renderCards() {
+  const grid = document.getElementById("cardsGrid");
+  grid.innerHTML = state.processes.map(p => {
+    const isLeader = p.pid === state.leader_pid;
+    let cls = "process-card";
+    if (!p.alive)       cls += " dead";
+    else if (isLeader)  cls += " leader";
+    else if (p.in_election) cls += " electing";
+
+    let badgeCls = "badge-alive", badgeTxt = "vivo";
+    if (!p.alive)            { badgeCls="badge-dead";     badgeTxt="morto"; }
+    else if (isLeader)       { badgeCls="badge-leader";   badgeTxt="líder"; }
+    else if (p.in_election)  { badgeCls="badge-electing"; badgeTxt="eleição"; }
+
+    const icon = !p.alive ? "💀" : isLeader ? "👑" : "🖥️";
+
+    return `<div class="${cls}" onclick="openProcModal(${p.pid})" title="Clique para ações">
+      <div class="card-icon">${icon}</div>
+      <div class="card-pid">${p.pid}</div>
+      <div class="card-label">PID</div>
+      <div class="card-badge ${badgeCls}">${badgeTxt}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderLog() {
+  const container = document.getElementById("logContainer");
+  const msgs = state.messages;
+  document.getElementById("logCount").textContent = `${msgs.length} evento${msgs.length!==1?"s":""}`;
+
+  if (msgs.length === lastMsgCount) return;
+
+  // só adiciona as novas mensagens
+  const newMsgs = msgs.slice(lastMsgCount);
+  lastMsgCount = msgs.length;
+
+  newMsgs.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "log-entry" + (m.highlight ? " highlight" : "");
+    div.innerHTML = `
+      <span class="log-time">${m.time}</span>
+      <span class="log-type type-${m.type.replace(/\s/g,'_')}">${m.type}</span>
+      <span class="log-detail">
+        <span class="log-sender">${m.sender}→${m.receiver}: </span>${m.detail}
+      </span>`;
+    container.appendChild(div);
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+function renderStatus() {
+  const alive = state.processes.filter(p => p.alive).length;
+  const dead  = state.processes.length - alive;
+  document.getElementById("aliveCount").textContent = `${alive} vivo${alive!==1?"s":""}`;
+  document.getElementById("deadCount").textContent  = `${dead} morto${dead!==1?"s":""}`;
+  document.getElementById("leaderDisplay").textContent =
+    state.leader_pid ? `👑 Líder: P${state.leader_pid}` : "Sem líder";
+}
+
+// ── Canvas network diagram ─────────────────────────────────────
+function renderCanvas() {
+  const canvas = document.getElementById("networkCanvas");
+  const W = canvas.parentElement.clientWidth - 32;
+  canvas.width  = W;
+  canvas.height = 260;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, W, 260);
+
+  const procs = state.processes;
+  if (!procs.length) return;
+
+  const R = 30;
+  const cx = W / 2, cy = 130;
+  const radius = Math.min(W / 2 - R - 20, 100);
+
+  // positions
+  const pos = procs.map((p, i) => {
+    const angle = (2 * Math.PI * i / procs.length) - Math.PI / 2;
+    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle), p };
+  });
+
+  // draw edges (ring topology visualization)
+  ctx.lineWidth = 1;
+  for (let i = 0; i < pos.length; i++) {
+    for (let j = i + 1; j < pos.length; j++) {
+      const a = pos[i], b = pos[j];
+      const bothAlive = a.p.alive && b.p.alive;
+      ctx.strokeStyle = bothAlive ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.03)";
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+
+  // draw nodes
+  pos.forEach(({ x, y, p }) => {
+    const isLeader = p.pid === state.leader_pid;
+
+    // glow for leader
+    if (isLeader) {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R + 14);
+      g.addColorStop(0, "rgba(247,201,72,.35)");
+      g.addColorStop(1, "rgba(247,201,72,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, R + 14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // circle
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, Math.PI * 2);
+    if (!p.alive) {
+      ctx.fillStyle = "#1a1a2e";
+      ctx.strokeStyle = "#30363d";
+    } else if (isLeader) {
+      ctx.fillStyle = "rgba(247,201,72,.18)";
+      ctx.strokeStyle = "#f7c948";
+    } else if (p.in_election) {
+      ctx.fillStyle = "rgba(188,140,255,.15)";
+      ctx.strokeStyle = "#bc8cff";
+    } else {
+      ctx.fillStyle = "#21262d";
+      ctx.strokeStyle = "#3fb950";
+    }
+    ctx.lineWidth = isLeader ? 2.5 : 1.5;
+    ctx.fill();
+    ctx.stroke();
+
+    // icon
+    ctx.font = "18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(!p.alive ? "💀" : isLeader ? "👑" : "🖥️", x, y - 4);
+
+    // PID label
+    ctx.font = "bold 11px 'JetBrains Mono', monospace";
+    ctx.fillStyle = !p.alive ? "#555" : isLeader ? "#f7c948" : "#e6edf3";
+    ctx.fillText(`P${p.pid}`, x, y + 16);
+  });
+}
+
+// ── Init & poll ───────────────────────────────────────────────
+fetchState();
+setInterval(fetchState, 800);
+window.addEventListener("resize", renderCanvas);
+</script>
+</body>
+</html>
